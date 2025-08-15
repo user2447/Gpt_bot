@@ -1,0 +1,3 @@
+# Environment / secret files
+.env
+api.env
