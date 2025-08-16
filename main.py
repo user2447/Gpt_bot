@@ -1,8 +1,8 @@
 import os
 import logging
 from dotenv import load_dotenv
-from telegram import Update
-from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes, CallbackQueryHandler
 from openai import OpenAI
 from collections import defaultdict
 from datetime import datetime, timedelta
@@ -43,7 +43,7 @@ DAILY_LIMIT_DEFAULT = 30
 
 # Paketlar narxi va limit
 packages = {
-    "O‘diy": {"daily_limit": 100, "price": 7990},
+    "Odiy": {"daily_limit": 100, "price": 7990},
     "Standart": {"daily_limit": 250, "price": 14990},
 }
 
@@ -61,11 +61,29 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # /premium komandasi
 async def premium(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    msg = "📦 Premium paketlar:\n\n"
-    for name, info in packages.items():
-        msg += f"{name} paket: Kunlik {info['daily_limit']} ta savol - Narxi: {info['price']} so‘m\n"
-    msg += "\nSiz o‘zingizga mos paketni tanlab, admin bilan bog‘lanishingiz mumkin."
-    await update.message.reply_text(msg)
+    keyboard = [
+        [InlineKeyboardButton("Odiy paket", callback_data="premium_Odiy")],
+        [InlineKeyboardButton("Standart paket", callback_data="premium_Standart")]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    await update.message.reply_text(
+        "📦 Premium paketlar:\n\n"
+        "Tanlamoqchi bo‘lgan paketni bosing, sizga to‘lov raqami ko‘rsatiladi.\n"
+        "To‘lov qilganingizdan so‘ng admin sizga /premium funksiyasini beradi.",
+        reply_markup=reply_markup
+    )
+
+# Inline button callback
+async def premium_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    package_name = query.data.split("_")[1]
+    await query.edit_message_text(
+        text=f"✅ Siz {package_name} paketini tanladingiz.\n\n"
+             f"💳 To‘lov raqami: 9860190101371507 X.A\n"
+             f"💰 To‘lov: 0 so‘m (cheksiz, rasm yuborib adminga tasdiqlatishingiz mumkin)\n\n"
+             "To‘lovni amalga oshirganingizdan so‘ng admin sizga /premium funksiyasini beradi."
+    )
 
 # /status komandasi
 async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -87,15 +105,17 @@ async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "✅ Reklamasiz ishlash"
         )
     else:
-        status_text = "⭐ Status: O‘diy"
+        status_text = "⭐ Status: Odiy"
         daily_limit = DAILY_LIMIT_DEFAULT
-        extra_info = (
-            f"💡 Kunlik limit: {daily_limit} ta savol\n"
-            "⚠️ Sizning kunlik foydalanish limitingiz tugadi, agar limitni oshirmoqchi bo‘lsangiz /premium orqali paket sotib oling.\n"
-            "📦 Premium paketlar:\n"
-            "   - O‘diy paket: 100 ta kunlik savol - 7990 so‘m\n"
-            "   - Standart paket: 250 ta kunlik savol - 14990 so‘m"
-        )
+        extra_info = ""
+        if user_daily_stats.get(user_id, 0) >= daily_limit:
+            extra_info = (
+                "⚠️ Sizning kunlik foydalanish limitingiz tugadi. "
+                "Agar limitni oshirmoqchi bo‘lsangiz /premium orqali paket sotib oling.\n"
+                "📦 Premium paketlar:\n"
+                "   - Odiy paket: 100 ta kunlik savol - 7990 so‘m\n"
+                "   - Standart paket: 250 ta kunlik savol - 14990 so‘m"
+            )
 
     msg = f"👤 Ism: {user_name}\n" \
           f"🆔 ID: {user_id}\n" \
@@ -168,47 +188,4 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         chat_histories[user.id].append({"role": "assistant", "content": bot_reply})
 
         # Premium foydalanuvchi chat xotirasi kengaytirildi
-        max_history = 50 if user.id in premium_users else 20
-        if len(chat_histories[user.id]) > max_history:
-            chat_histories[user.id] = chat_histories[user.id][-max_history:]
-
-    except Exception as e:
-        # Har qanday xato container crash qilmasligi uchun ushlanadi
-        logging.error(f"❌ Xatolik foydalanuvchi ID {user.id}: {e}")
-        await update.message.reply_text(f"❌ Kechirasiz, xatolik yuz berdi: {e}")
-
-# /top komandasi
-async def top(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    reset_daily_if_needed()
-    try:
-        if update.effective_user.id != ADMIN_ID:
-            await update.message.reply_text("⛔ Siz admin emassiz.")
-            return
-        if not user_total_stats:
-            await update.message.reply_text("📊 Statistika yo‘q.")
-            return
-        sorted_users = sorted(user_total_stats.items(), key=lambda x: x[1], reverse=True)[:5]
-        msg = "📊 Eng faol 5 foydalanuvchi:\n\n"
-        for uid, total in sorted_users:
-            today_count = user_daily_stats.get(uid, 0)
-            msg += f"👤 User ID: {uid}\n   📅 Bugun: {today_count} ta\n   📈 Umumiy: {total} ta\n\n"
-        await update.message.reply_text(msg)
-    except Exception as e:
-        logging.error(f"❌ /top xatolik: {e}")
-
-# Botni ishga tushirish
-def main():
-    try:
-        app = Application.builder().token(TELEGRAM_TOKEN).build()
-        app.add_handler(CommandHandler("start", start))
-        app.add_handler(CommandHandler("top", top))
-        app.add_handler(CommandHandler("premium", premium))
-        app.add_handler(CommandHandler("status", status))
-        app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
-        print("🤖 Bot ishga tushdi...")
-        app.run_polling()
-    except Exception as e:
-        logging.error(f"❌ Bot start xatolik: {e}")
-
-if __name__ == "__main__":
-    main()
+        max_history = 50 if user.id
