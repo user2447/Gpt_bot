@@ -20,14 +20,16 @@ client = OpenAI(api_key=OPENAI_API_KEY)
 
 logging.basicConfig(format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO)
 
+# Statistika va xotira
 user_total_stats = defaultdict(int)
 user_daily_stats = defaultdict(int)
 last_stat_date = datetime.now().date()
 banned_users = {}
 chat_histories = defaultdict(list)
 user_last_messages = defaultdict(list)
-premium_users = {}
-pending_payments = {}
+premium_users = {}      # user_id -> paket nomi
+pending_payments = {}   # user_id -> paket tanlangan
+photo_pending = {}      # user_id -> True/False rasm kutish
 
 MAX_PER_MINUTE = 3
 DAILY_LIMIT_DEFAULT = 30
@@ -44,19 +46,23 @@ def reset_daily_if_needed():
         user_daily_stats = defaultdict(int)
         last_stat_date = today
 
+# /start
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("Salom! Men GPT-4 mini asosidagi Telegram botman 🤖. Savolingizni yozing.")
 
+# /premium
 async def premium(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = []
     msg = "📦 Premium paketlar:\n\n"
     for name, info in packages.items():
         msg += f"{name} paket: Kunlik {info['daily_limit']} ta savol - Narxi: {info['price']} so‘m\n"
         keyboard.append([InlineKeyboardButton(f"{name} - {info['price']} so‘m", callback_data=f"premium_{name}")])
-    msg += "\nSiz paketni tanlab, to‘lov qilganingizni adminga bildiring. Keyin sizga premium beriladi."
+    msg += "\nSiz paketni tanlab, to‘lov qilganingizni adminga bildiring. Keyin sizga premium beriladi.\n"
+    msg += "💳 To‘lov uchun karta: 9860190101371507 Xilola Akamuratova\n⚠️ Chek yuborilishi shart, aks holda premium berilmaydi."
     reply_markup = InlineKeyboardMarkup(keyboard)
     await update.message.reply_text(msg, reply_markup=reply_markup)
 
+# Callback paket tanlash
 async def premium_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -71,6 +77,7 @@ async def premium_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         ])
     )
 
+# To‘lov tugmasi bosilganda
 async def payment_done_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -79,16 +86,30 @@ async def payment_done_callback(update: Update, context: ContextTypes.DEFAULT_TY
         await query.edit_message_text("⚠️ Hech qanday paket tanlanmagan yoki to‘lov summasi mavjud emas.")
         return
     package_name = pending_payments[user_id]
+    photo_pending[user_id] = True  # rasm kutish
     await context.bot.send_message(
         ADMIN_ID,
         f"💳 Foydalanuvchi {query.from_user.full_name} ({user_id}) "
-        f"{package_name} paketini to‘lov qilganligini tasdiqlash kerak. Iltimos, chekni tekshiring."
+        f"{package_name} paketini to‘lov qilganligini tasdiqlash uchun chek kutyapti."
     )
     await query.edit_message_text(
         f"✅ Siz to‘lov tugmasini bosdingiz. Iltimos, chek rasmini yuboring. "
         f"Admin tasdiqlagach, sizga paket beriladi."
     )
 
+# Rasm handler
+async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    if user_id in photo_pending and photo_pending[user_id]:
+        photo_file = update.message.photo[-1].get_file()
+        await photo_file.download_to_drive(f"{user_id}_check.jpg")
+        await context.bot.send_message(ADMIN_ID, f"📸 Foydalanuvchi {update.effective_user.full_name} ({user_id}) chek yubordi.")
+        await update.message.reply_text("⏳ Iltimos kuting, admin tasdiqlagach paket beriladi.")
+        photo_pending[user_id] = False
+    else:
+        await update.message.reply_text("⚠️ Siz hali paket tanlamagansiz yoki chek yuborish shart emas.")
+
+# /status
 async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
     reset_daily_if_needed()
     user_id = update.effective_user.id
@@ -114,6 +135,7 @@ async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
     msg = f"👤 Ism: {user_name}\n🆔 ID: {user_id}\n{status_text}\n{limit_msg}\n\n{extra_info}"
     await update.message.reply_text(msg)
 
+# Xabarlarni qayta ishlash
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     reset_daily_if_needed()
     user = update.effective_user
@@ -176,6 +198,7 @@ def main():
     app.add_handler(CallbackQueryHandler(premium_callback, pattern=r"^premium_"))
     app.add_handler(CallbackQueryHandler(payment_done_callback, pattern=r"^payment_done$"))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+    app.add_handler(MessageHandler(filters.PHOTO, handle_photo))
 
     logging.info("🤖 Bot ishga tushdi!")
     app.run_polling()
