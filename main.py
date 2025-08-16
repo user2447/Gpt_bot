@@ -7,6 +7,7 @@ from openai import OpenAI
 from collections import defaultdict
 from datetime import datetime, timedelta
 
+# .env faylni yuklash
 load_dotenv()
 
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
@@ -16,10 +17,13 @@ ADMIN_ID = int(os.getenv("ADMIN_ID", "0"))
 if not TELEGRAM_TOKEN or not OPENAI_API_KEY:
     raise ValueError("❌ TELEGRAM_TOKEN yoki OPENAI_API_KEY topilmadi!")
 
+# OpenAI client
 client = OpenAI(api_key=OPENAI_API_KEY)
 
+# Logging sozlamalari
 logging.basicConfig(format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO)
 
+# Statistika va xotira
 user_total_stats = defaultdict(int)
 user_daily_stats = defaultdict(int)
 last_stat_date = datetime.now().date()
@@ -30,6 +34,7 @@ user_last_messages = defaultdict(list)
 MAX_PER_MINUTE = 3
 DAILY_LIMIT_DEFAULT = 30
 
+# Premium va to‘lovlar
 premium_users = {}      # user_id -> paket nomi
 pending_payments = {}   # user_id -> paket tanlangan
 
@@ -38,6 +43,7 @@ packages = {
     "Standart": {"daily_limit": 250, "price": 14990},
 }
 
+# Kundalik limitni yangilash
 def reset_daily_if_needed():
     global last_stat_date, user_daily_stats
     today = datetime.now().date()
@@ -45,9 +51,11 @@ def reset_daily_if_needed():
         user_daily_stats = defaultdict(int)
         last_stat_date = today
 
+# /start
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("Salom! Men GPT-4 mini asosidagi Telegram botman 🤖. Savolingizni yozing.")
 
+# /premium
 async def premium(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = []
     msg = "📦 Premium paketlar:\n\n"
@@ -58,6 +66,7 @@ async def premium(update: Update, context: ContextTypes.DEFAULT_TYPE):
     reply_markup = InlineKeyboardMarkup(keyboard)
     await update.message.reply_text(msg, reply_markup=reply_markup)
 
+# Callback (paket tanlash)
 async def premium_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -72,6 +81,7 @@ async def premium_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         ])
     )
 
+# To‘lov tasdiqlash
 async def payment_done_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -90,6 +100,7 @@ async def payment_done_callback(update: Update, context: ContextTypes.DEFAULT_TY
         f"Admin tasdiqlagach, sizga paket beriladi."
     )
 
+# /status
 async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
     reset_daily_if_needed()
     user_id = update.effective_user.id
@@ -115,6 +126,7 @@ async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
     msg = f"👤 Ism: {user_name}\n🆔 ID: {user_id}\n{status_text}\n{limit_msg}\n\n{extra_info}"
     await update.message.reply_text(msg)
 
+# Xabarlarni qayta ishlash
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     reset_daily_if_needed()
     user = update.effective_user
@@ -159,4 +171,16 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         chat_histories[user.id].append({"role": "assistant", "content": bot_reply})
         max_history = 50 if user.id in premium_users else 20
-        if len(chat_hist)
+        if len(chat_histories[user.id]) > max_history:
+            chat_histories[user.id] = chat_histories[user.id][-max_history:]
+
+    except Exception as e:
+        if "rate_limit_exceeded" in str(e):
+            await update.message.reply_text("❌ Hozir API band, iltimos bir ozdan keyin urinib ko‘ring.")
+        else:
+            logging.error(f"❌ Xatolik: {e}")
+            await update.message.reply_text(f"❌ Kechirasiz, xatolik yuz berdi: {e}")
+
+# /top
+async def top(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    reset_daily_if
