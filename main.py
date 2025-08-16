@@ -85,8 +85,14 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             chat_histories[user.id] = chat_histories[user.id][-20:]
 
     except Exception as e:
-        logging.error(f"❌ Xatolik: {e}")
-        await update.message.reply_text(f"❌ Kechirasiz, xatolik yuz berdi: {e}")
+        # Agar limit tugagan bo‘lsa, foydalanuvchiga qulay xabar chiqarish
+        if "rate_limit_exceeded" in str(e):
+            await update.message.reply_text(
+                "❌ Hozir API band, iltimos bir ozdan keyin urinib ko‘ring."
+            )
+        else:
+            logging.error(f"❌ Xatolik: {e}")
+            await update.message.reply_text(f"❌ Kechirasiz, xatolik yuz berdi: {e}")
 
 # /top komandasi
 async def top(update: Update, context: ContextTypes.DEFAULT_TYPE):
