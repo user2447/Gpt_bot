@@ -43,7 +43,7 @@ def reset_daily_if_needed():
 
 # /start komandasi
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("Salom! Men GPT-4 asosidagi Telegram botman 🤖. Savolingizni yozing.")
+    await update.message.reply_text("Salom! Men GPT-4 mini asosidagi Telegram botman 🤖. Savolingizni yozing.")
 
 # Xabarlarni qayta ishlash
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -73,7 +73,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         system_message = f"Siz foydali Telegram chatbot bo‘lasiz. Hozirgi yil {current_year}."
 
         response = client.chat.completions.create(
-            model="gpt-4",
+            model="gpt-4o-mini",
             messages=[{"role": "system", "content": system_message}, *chat_histories[user.id]]
         )
 
