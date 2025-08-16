@@ -23,7 +23,7 @@ client = OpenAI(api_key=OPENAI_API_KEY)
 # Logging
 logging.basicConfig(format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO)
 
-# Statistika, ban ro‘yxati va xotira
+# Statistika va xotira
 user_total_stats = defaultdict(int)
 user_daily_stats = defaultdict(int)
 last_stat_date = datetime.now().date()
@@ -34,8 +34,9 @@ user_last_messages = defaultdict(list)
 MAX_PER_MINUTE = 3
 DAILY_LIMIT_DEFAULT = 30
 
-# Premium foydalanuvchilar: user_id -> paket nomi
-premium_users = {}  # misol: {123456789: "Odiy"}
+# Premium foydalanuvchilar va to‘lov holati
+premium_users = {}  # user_id -> paket nomi
+pending_payments = {}  # user_id -> tanlangan paket
 
 packages = {
     "Odiy": {"daily_limit": 100, "price": 7990},
@@ -61,7 +62,7 @@ async def premium(update: Update, context: ContextTypes.DEFAULT_TYPE):
     for name, info in packages.items():
         msg += f"{name} paket: Kunlik {info['daily_limit']} ta savol - Narxi: {info['price']} so‘m\n"
         keyboard.append([InlineKeyboardButton(f"{name} - {info['price']} so‘m", callback_data=f"premium_{name}")])
-    msg += "\nSiz paketni tanlash orqali admin bilan bog‘lanishingiz mumkin va to‘lov qilgach, sizga /premium beriladi."
+    msg += "\nSiz paketni tanlab, to‘lov qilganingizni adminga bildiring. Keyin sizga premium beriladi."
     reply_markup = InlineKeyboardMarkup(keyboard)
     await update.message.reply_text(msg, reply_markup=reply_markup)
 
@@ -70,9 +71,29 @@ async def premium_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
     package_name = query.data.replace("premium_", "")
+    pending_payments[query.from_user.id] = package_name
     await query.edit_message_text(f"✅ Siz tanladingiz: {package_name} paketi.\n"
-                                  f"Adminga to‘lov qilganingizni bildiring, so‘ng sizga paket beriladi.\n"
-                                  f"To‘lov summasi: {packages[package_name]['price']} so‘m")
+                                  f"To‘lov summasi: {packages[package_name]['price']} so‘m\n"
+                                  f"To‘lov qilganingizni tasdiqlash uchun quyidagi tugmani bosing:",
+                                  reply_markup=InlineKeyboardMarkup([
+                                      [InlineKeyboardButton("To‘lov qilindi ✅", callback_data="payment_done")]
+                                  ]))
+
+# To‘lov tasdiqlash
+async def payment_done_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    user_id = query.from_user.id
+    if user_id not in pending_payments:
+        await query.edit_message_text("⚠️ Hech qanday paket tanlanmagan yoki to‘lov summasi mavjud emas.")
+        return
+    package_name = pending_payments[user_id]
+    # Adminga xabar
+    await context.bot.send_message(ADMIN_ID, f"💳 Foydalanuvchi {query.from_user.full_name} ({user_id}) "
+                                             f"{package_name} paketini to‘lov qilganligini tasdiqlash kerak. "
+                                             f"Iltimos, chekni tekshiring.")
+    await query.edit_message_text(f"✅ Siz to‘lov tugmasini bosdingiz. Iltimos, chek rasmini yuboring. "
+                                  f"Admin tasdiqlagach, sizga paket beriladi.")
 
 # /status
 async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -152,8 +173,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(bot_reply)
 
         chat_histories[user.id].append({"role": "assistant", "content": bot_reply})
-
-        # Chat xotirasi uzunligi
         max_history = 50 if user.id in premium_users else 20
         if len(chat_histories[user.id]) > max_history:
             chat_histories[user.id] = chat_histories[user.id][-max_history:]
@@ -167,75 +186,4 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # /top
 async def top(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    reset_daily_if_needed()
-    if update.effective_user.id != ADMIN_ID:
-        await update.message.reply_text("⛔ Siz admin emassiz.")
-        return
-    if not user_total_stats:
-        await update.message.reply_text("📊 Statistika yo‘q.")
-        return
-    sorted_users = sorted(user_total_stats.items(), key=lambda x: x[1], reverse=True)[:5]
-    msg = "📊 Eng faol 5 foydalanuvchi:\n\n"
-    for uid, total in sorted_users:
-        today_count = user_daily_stats.get(uid, 0)
-        msg += f"👤 User ID: {uid}\n   📅 Bugun: {today_count} ta\n   📈 Umumiy: {total} ta\n\n"
-    await update.message.reply_text(msg)
-
-# /ban
-async def ban(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if update.effective_user.id != ADMIN_ID:
-        await update.message.reply_text("⛔ Siz admin emassiz.")
-        return
-    if not context.args:
-        await update.message.reply_text("❌ Foydalanuvchi ID va sabab kiriting. Masalan: `/ban 5553171661 yomon so'zlar ishlatish`")
-        return
-    try:
-        uid = int(context.args[0])
-        reason = " ".join(context.args[1:]) if len(context.args) > 1 else "Sabab ko‘rsatilmagan"
-        banned_users[uid] = reason
-        await update.message.reply_text(f"🚫 Foydalanuvchi {uid} ban qilindi.\n📌 Sababi: {reason}")
-        try:
-            await context.bot.send_message(uid, f"⛔ Siz ban olgansiz.\n📌 Sababi: {reason}")
-        except Exception as e:
-            logging.warning(f"❌ Ban xabarini foydalanuvchiga yuborib bo‘lmadi: {e}")
-    except Exception as e:
-        await update.message.reply_text(f"❌ Xato: {e}")
-
-# /unban
-async def unban(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if update.effective_user.id != ADMIN_ID:
-        await update.message.reply_text("⛔ Siz admin emassiz.")
-        return
-    if not context.args:
-        await update.message.reply_text("❌ Foydalanuvchi ID kiriting. Masalan: `/unban 5553171661`")
-        return
-    try:
-        uid = int(context.args[0])
-        if uid in banned_users:
-            banned_users.pop(uid)
-            await update.message.reply_text(f"✅ Foydalanuvchi {uid} unban qilindi.")
-            try:
-                await context.bot.send_message(uid, "✅ Siz bandan chiqdingiz. Endi botdan foydalanishingiz mumkin.")
-            except Exception as e:
-                logging.warning(f"❌ Unban xabarini foydalanuvchiga yuborib bo‘lmadi: {e}")
-        else:
-            await update.message.reply_text("ℹ️ Bu foydalanuvchi ban qilinmagan.")
-    except Exception as e:
-        await update.message.reply_text(f"❌ Xato: {e}")
-
-# Botni ishga tushirish
-def main():
-    app = Application.builder().token(TELEGRAM_TOKEN).build()
-    app.add_handler(CommandHandler("start", start))
-    app.add_handler(CommandHandler("status", status))
-    app.add_handler(CommandHandler("premium", premium))
-    app.add_handler(CommandHandler("top", top))
-    app.add_handler(CommandHandler("ban", ban))
-    app.add_handler(CommandHandler("unban", unban))
-    app.add_handler(CallbackQueryHandler(premium_callback, pattern="^premium_"))
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
-    print("🤖 Bot ishga tushdi...")
-    app.run_polling()
-
-if __name__ == "__main__":
-    main()
+    reset_daily
