@@ -187,8 +187,14 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(bot_reply)
         chat_histories[user.id].append({"role": "assistant", "content": bot_reply})
 
-      # Premium foydalanuvchi chat xotirasi kengaytirildi
-    max_history = 50 if user.id in premium_users else 20
-    if len(chat_histories[user.id]) > max_history:
-    chat_histories[user.id] = chat_histories[user.id][-max_history:]
+        # Premium foydalanuvchi chat xotirasi kengaytirildi
+        max_history = 50 if user.id in premium_users else 20
+        if len(chat_histories[user.id]) > max_history:
+            chat_histories[user.id] = chat_histories[user.id][-max_history:]
 
+    except Exception as e:
+        if "rate_limit_exceeded" in str(e):
+            await update.message.reply_text("❌ Hozir API band, iltimos bir ozdan keyin urinib ko‘ring.")
+        else:
+            logging.error(f"❌ Xatolik: {e}")
+            await
