@@ -43,12 +43,11 @@ def reset_daily_if_needed():
 
 # /start komandasi
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("Salom! Men GPT botman 🤖. Savolingizni yozing.")
+    await update.message.reply_text("Salom! Men GPT-4 asosidagi Telegram botman 🤖. Savolingizni yozing.")
 
 # Xabarlarni qayta ishlash
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     reset_daily_if_needed()
-
     user = update.effective_user
     text = update.message.text
 
@@ -70,12 +69,12 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_histories[user.id].append({"role": "user", "content": text})
 
     try:
+        current_year = datetime.now().year
+        system_message = f"Siz foydali Telegram chatbot bo‘lasiz. Hozirgi yil {current_year}."
+
         response = client.chat.completions.create(
-            model="gpt-4o-mini",
-            messages=[
-                {"role": "system", "content": "Siz foydali telegram chatbot bo‘lasiz."},
-                *chat_histories[user.id]
-            ]
+            model="gpt-4",
+            messages=[{"role": "system", "content": system_message}, *chat_histories[user.id]]
         )
 
         bot_reply = response.choices[0].message.content
@@ -92,22 +91,17 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # /top komandasi
 async def top(update: Update, context: ContextTypes.DEFAULT_TYPE):
     reset_daily_if_needed()
-
     if update.effective_user.id != ADMIN_ID:
         await update.message.reply_text("⛔ Siz admin emassiz.")
         return
-
     if not user_total_stats:
         await update.message.reply_text("📊 Statistika yo‘q.")
         return
-
     sorted_users = sorted(user_total_stats.items(), key=lambda x: x[1], reverse=True)[:5]
-
     msg = "📊 Eng faol 5 foydalanuvchi:\n\n"
     for uid, total in sorted_users:
         today_count = user_daily_stats.get(uid, 0)
         msg += f"👤 User ID: {uid}\n   📅 Bugun: {today_count} ta\n   📈 Umumiy: {total} ta\n\n"
-
     await update.message.reply_text(msg)
 
 # /ban komandasi
@@ -115,22 +109,18 @@ async def ban(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id != ADMIN_ID:
         await update.message.reply_text("⛔ Siz admin emassiz.")
         return
-
     if not context.args:
         await update.message.reply_text("❌ Foydalanuvchi ID va sabab kiriting. Masalan: `/ban 5553171661 yomon so'zlar ishlatish`")
         return
-
     try:
         uid = int(context.args[0])
         reason = " ".join(context.args[1:]) if len(context.args) > 1 else "Sabab ko‘rsatilmagan"
         banned_users[uid] = reason
         await update.message.reply_text(f"🚫 Foydalanuvchi {uid} ban qilindi.\n📌 Sababi: {reason}")
-
         try:
             await context.bot.send_message(uid, f"⛔ Siz ban olgansiz.\n📌 Sababi: {reason}")
         except Exception as e:
             logging.warning(f"❌ Ban xabarini foydalanuvchiga yuborib bo‘lmadi: {e}")
-
     except Exception as e:
         await update.message.reply_text(f"❌ Xato: {e}")
 
@@ -139,17 +129,14 @@ async def unban(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id != ADMIN_ID:
         await update.message.reply_text("⛔ Siz admin emassiz.")
         return
-
     if not context.args:
         await update.message.reply_text("❌ Foydalanuvchi ID kiriting. Masalan: `/unban 5553171661`")
         return
-
     try:
         uid = int(context.args[0])
         if uid in banned_users:
             banned_users.pop(uid)
             await update.message.reply_text(f"✅ Foydalanuvchi {uid} unban qilindi.")
-
             try:
                 await context.bot.send_message(uid, "✅ Siz bandan chiqdingiz. Endi botdan foydalanishingiz mumkin.")
             except Exception as e:
@@ -162,13 +149,11 @@ async def unban(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # Botni ishga tushirish
 def main():
     app = Application.builder().token(TELEGRAM_TOKEN).build()
-
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("top", top))
     app.add_handler(CommandHandler("ban", ban))
     app.add_handler(CommandHandler("unban", unban))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
-
     print("🤖 Bot ishga tushdi...")
     app.run_polling()
 
