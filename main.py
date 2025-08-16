@@ -48,10 +48,15 @@ def reset_daily_if_needed():
 
 # /start
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    keyboard = [[InlineKeyboardButton("📦 Premium Paketlar", callback_data="menu_premium")],
-                [InlineKeyboardButton("📊 Status", callback_data="menu_status")]]
+    keyboard = [
+        [InlineKeyboardButton("📦 Premium Paketlar", callback_data="menu_premium")],
+        [InlineKeyboardButton("📊 Status", callback_data="menu_status")]
+    ]
     reply_markup = InlineKeyboardMarkup(keyboard)
-    await update.message.reply_text("Salom! Men GPT-4 mini asosidagi Telegram botman 🤖. Quyidagi tugmalar orqali boshqarishingiz mumkin.", reply_markup=reply_markup)
+    await update.message.reply_text(
+        "Salom! Men GPT-4 mini asosidagi Telegram botman 🤖. Quyidagi tugmalar orqali boshqarishingiz mumkin.",
+        reply_markup=reply_markup
+    )
 
 # /premium
 async def premium(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -92,8 +97,7 @@ async def premium_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"{package_name} paketini to‘lov qilganligini tasdiqlash uchun chek kutyapti."
         )
         await query.edit_message_text(
-            f"✅ Siz to‘lov tugmasini bosdingiz. Iltimos, chek rasmini yuboring. "
-            f"Admin tasdiqlagach, sizga paket beriladi."
+            f"✅ Siz to‘lov tugmasini bosdingiz. Iltimos, chek rasmini yuboring. Admin tasdiqlagach, sizga paket beriladi."
         )
 
 # /givepremium id paket
@@ -163,5 +167,55 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if user.id != ADMIN_ID:
             await context.bot.send_message(
                 ADMIN_ID,
-                f"📩 Yangi xabar:\n\n👤 {user.username or user.full_name}\n🆔 {user.id}
+                f"📩 Yangi xabar:\n\n👤 {user.username or user.full_name}\n🆔 {user.id}\n\n✉️ {text}"
             )
+
+        chat_histories[user.id].append({"role": "user", "content": text})
+        try:
+            system_message = f"Siz foydali Telegram chatbot bo‘lasiz. Hozirgi yil {datetime.now().year}."
+            response = client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=[{"role": "system", "content": system_message}, *chat_histories[user.id]]
+            )
+            bot_reply = response.choices[0].message.content
+            await update.message.reply_text(bot_reply)
+            chat_histories[user.id].append({"role": "assistant", "content": bot_reply})
+            max_history = 50 if user.id in premium_users else 20
+            if len(chat_histories[user.id]) > max_history:
+                chat_histories[user.id] = chat_histories[user.id][-max_history:]
+        except Exception as e:
+            if "rate_limit_exceeded" in str(e):
+                await update.message.reply_text("❌ Hozir API band, iltimos bir ozdan keyin urinib ko‘ring.")
+            else:
+                logging.error(f"❌ Xatolik: {e}")
+                await update.message.reply_text(f"❌ Kechirasiz, xatolik yuz berdi: {e}")
+
+# Rasm handler
+async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    if user_id in photo_pending and photo_pending[user_id]:
+        photo_file = await update.message.photo[-1].get_file()
+        await photo_file.download_to_drive(f"{user_id}_check.jpg")
+        await context.bot.send_message(ADMIN_ID, f"📸 Foydalanuvchi {update.effective_user.full_name} ({user_id}) chek yubordi.")
+        await update.message.reply_text("⏳ Iltimos kuting, admin tasdiqlagach paket beriladi.")
+        photo_pending[user_id] = False
+    else:
+        await update.message.reply_text("⚠️ Siz hali paket tanlamagansiz yoki chek yuborish shart emas.")
+
+# Bot ishga tushirish
+def main():
+    app = Application.builder().token(TELEGRAM_TOKEN).build()
+
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(CommandHandler("premium", premium))
+    app.add_handler(CommandHandler("status", status))
+    app.add_handler(CommandHandler("givepremium", give_premium))
+    app.add_handler(CallbackQueryHandler(premium_callback))
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+    app.add_handler(MessageHandler(filters.PHOTO, handle_photo))
+
+    logging.info("🤖 Bot ishga tushdi!")
+    app.run_polling()
+
+if __name__ == "__main__":
+    main()
