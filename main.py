@@ -34,7 +34,7 @@ banned_users = {}
 chat_histories = defaultdict(list)
 
 # Premium foydalanuvchilar: user_id -> {"package": nomi, "expire": datetime}
-premium_users = {}  
+premium_users = {}
 
 # Rate limit uchun foydalanuvchi so‘rov vaqtlari
 user_last_messages = defaultdict(list)
@@ -87,13 +87,13 @@ async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "✅ Reklamasiz ishlash"
         )
     else:
-        status_text = "⭐ Status: Odiy"
+        status_text = "⭐ Status: O‘diy"
         daily_limit = DAILY_LIMIT_DEFAULT
         extra_info = (
             f"💡 Kunlik limit: {daily_limit} ta savol\n"
             "⚠️ Sizning kunlik foydalanish limitingiz tugadi, agar limitni oshirmoqchi bo‘lsangiz /premium orqali paket sotib oling.\n"
             "📦 Premium paketlar:\n"
-            "   - Odiy paket: 100 ta kunlik savol - 7990 so‘m\n"
+            "   - O‘diy paket: 100 ta kunlik savol - 7990 so‘m\n"
             "   - Standart paket: 250 ta kunlik savol - 14990 so‘m"
         )
 
@@ -111,50 +111,50 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     text = update.message.text
 
-    # Rate limit (1 minutda 3 ta so‘rov)
-    now = datetime.now()
-    user_last_messages[user.id] = [t for t in user_last_messages[user.id] if now - t < timedelta(minutes=1)]
-    if len(user_last_messages[user.id]) >= MAX_PER_MINUTE:
-        await update.message.reply_text("⏳ Siz juda tez so‘rov yubordingiz. Iltimos, 1 daqiqa kuting.")
-        return
-    user_last_messages[user.id].append(now)
-
-    # Ban tekshirish
-    if user.id in banned_users:
-        reason = banned_users[user.id]
-        await update.message.reply_text(f"⛔ Siz ban olgansiz.\n📌 Sababi: {reason}")
-        return
-
-    # Kunlik limit
-    if user.id in premium_users:
-        package = premium_users[user.id]['package']
-        daily_limit = packages[package]['daily_limit']
-    else:
-        daily_limit = DAILY_LIMIT_DEFAULT
-
-    if user_daily_stats[user.id] >= daily_limit:
-        if user.id in premium_users:
-            await update.message.reply_text(f"⚠️ Sizning kunlik limitingiz ({daily_limit} ta) tugadi.")
-        else:
-            await update.message.reply_text(
-                f"⚠️ Sizning kunlik foydalanish limitingiz tugadi. "
-                "Agar limitni oshirmoqchi bo‘lsangiz /premium orqali paket sotib oling."
-            )
-        return
-
-    logging.info(f"👤 Foydalanuvchi: {user.username} (ID: {user.id}) | ✉️ Xabar: {text}")
-    user_total_stats[user.id] += 1
-    user_daily_stats[user.id] += 1
-
-    if user.id != ADMIN_ID:
-        await context.bot.send_message(
-            chat_id=ADMIN_ID,
-            text=f"📩 Yangi xabar:\n\n👤 {user.username or user.full_name}\n🆔 {user.id}\n\n✉️ {text}"
-        )
-
-    chat_histories[user.id].append({"role": "user", "content": text})
-
     try:
+        # Rate limit (1 minutda 3 ta so‘rov)
+        now = datetime.now()
+        user_last_messages[user.id] = [t for t in user_last_messages[user.id] if now - t < timedelta(minutes=1)]
+        if len(user_last_messages[user.id]) >= MAX_PER_MINUTE:
+            await update.message.reply_text("⏳ Siz juda tez so‘rov yubordingiz. Iltimos, 1 daqiqa kuting.")
+            return
+        user_last_messages[user.id].append(now)
+
+        # Ban tekshirish
+        if user.id in banned_users:
+            reason = banned_users[user.id]
+            await update.message.reply_text(f"⛔ Siz ban olgansiz.\n📌 Sababi: {reason}")
+            return
+
+        # Kunlik limit
+        if user.id in premium_users:
+            package = premium_users[user.id]['package']
+            daily_limit = packages[package]['daily_limit']
+        else:
+            daily_limit = DAILY_LIMIT_DEFAULT
+
+        if user_daily_stats[user.id] >= daily_limit:
+            if user.id in premium_users:
+                await update.message.reply_text(f"⚠️ Sizning kunlik limitingiz ({daily_limit} ta) tugadi.")
+            else:
+                await update.message.reply_text(
+                    f"⚠️ Sizning kunlik foydalanish limitingiz tugadi. "
+                    "Agar limitni oshirmoqchi bo‘lsangiz /premium orqali paket sotib oling."
+                )
+            return
+
+        logging.info(f"👤 Foydalanuvchi: {user.username} (ID: {user.id}) | ✉️ Xabar: {text}")
+        user_total_stats[user.id] += 1
+        user_daily_stats[user.id] += 1
+
+        if user.id != ADMIN_ID:
+            await context.bot.send_message(
+                chat_id=ADMIN_ID,
+                text=f"📩 Yangi xabar:\n\n👤 {user.username or user.full_name}\n🆔 {user.id}\n\n✉️ {text}"
+            )
+
+        chat_histories[user.id].append({"role": "user", "content": text})
+
         current_year = datetime.now().year
         system_message = f"Siz foydali Telegram chatbot bo‘lasiz. Hozirgi yil {current_year}."
 
@@ -168,15 +168,47 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         chat_histories[user.id].append({"role": "assistant", "content": bot_reply})
 
         # Premium foydalanuvchi chat xotirasi kengaytirildi
-        if user.id in premium_users:
-            max_history = 50
-        else:
-            max_history = 20
+        max_history = 50 if user.id in premium_users else 20
         if len(chat_histories[user.id]) > max_history:
             chat_histories[user.id] = chat_histories[user.id][-max_history:]
 
     except Exception as e:
-        if "rate_limit_exceeded" in str(e):
-            await update.message.reply_text("❌ Hozir API band, iltimos bir ozdan keyin urinib ko‘ring.")
-        else:
-            logging.error(f"❌ Xatolik: {e}")
+        # Har qanday xato container crash qilmasligi uchun ushlanadi
+        logging.error(f"❌ Xatolik foydalanuvchi ID {user.id}: {e}")
+        await update.message.reply_text(f"❌ Kechirasiz, xatolik yuz berdi: {e}")
+
+# /top komandasi
+async def top(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    reset_daily_if_needed()
+    try:
+        if update.effective_user.id != ADMIN_ID:
+            await update.message.reply_text("⛔ Siz admin emassiz.")
+            return
+        if not user_total_stats:
+            await update.message.reply_text("📊 Statistika yo‘q.")
+            return
+        sorted_users = sorted(user_total_stats.items(), key=lambda x: x[1], reverse=True)[:5]
+        msg = "📊 Eng faol 5 foydalanuvchi:\n\n"
+        for uid, total in sorted_users:
+            today_count = user_daily_stats.get(uid, 0)
+            msg += f"👤 User ID: {uid}\n   📅 Bugun: {today_count} ta\n   📈 Umumiy: {total} ta\n\n"
+        await update.message.reply_text(msg)
+    except Exception as e:
+        logging.error(f"❌ /top xatolik: {e}")
+
+# Botni ishga tushirish
+def main():
+    try:
+        app = Application.builder().token(TELEGRAM_TOKEN).build()
+        app.add_handler(CommandHandler("start", start))
+        app.add_handler(CommandHandler("top", top))
+        app.add_handler(CommandHandler("premium", premium))
+        app.add_handler(CommandHandler("status", status))
+        app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+        print("🤖 Bot ishga tushdi...")
+        app.run_polling()
+    except Exception as e:
+        logging.error(f"❌ Bot start xatolik: {e}")
+
+if __name__ == "__main__":
+    main()
