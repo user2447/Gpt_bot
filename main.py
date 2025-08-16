@@ -27,13 +27,13 @@ logging.basicConfig(
 )
 
 # Statistika, ban ro‘yxati va user xotira
-user_total_stats = defaultdict(int)   # umumiy hisob
-user_daily_stats = defaultdict(int)   # bugungi hisob
+user_total_stats = defaultdict(int)
+user_daily_stats = defaultdict(int)
 last_stat_date = datetime.now().date()
-banned_users = {}  # {user_id: sabab}
-chat_histories = defaultdict(list)  # har bir user uchun chat eslab qolish
+banned_users = {}
+chat_histories = defaultdict(list)
 
-# === FUNKSIYA: sana yangilanganda kundalik hisobni tozalash ===
+# Kundalik hisobni tozalash
 def reset_daily_if_needed():
     global last_stat_date, user_daily_stats
     today = datetime.now().date()
@@ -41,7 +41,7 @@ def reset_daily_if_needed():
         user_daily_stats = defaultdict(int)
         last_stat_date = today
 
-# Start komandasi
+# /start komandasi
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("Salom! Men GPT botman 🤖. Savolingizni yozing.")
 
@@ -61,14 +61,12 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_total_stats[user.id] += 1
     user_daily_stats[user.id] += 1
 
-    # 🔔 Adminni xabardor qilish (faqat foydalanuvchi yozsa)
     if user.id != ADMIN_ID:
         await context.bot.send_message(
             chat_id=ADMIN_ID,
             text=f"📩 Yangi xabar:\n\n👤 {user.username or user.full_name}\n🆔 {user.id}\n\n✉️ {text}"
         )
 
-    # Foydalanuvchi tarixiga qo‘shamiz
     chat_histories[user.id].append({"role": "user", "content": text})
 
     try:
@@ -76,17 +74,14 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             model="gpt-4o-mini",
             messages=[
                 {"role": "system", "content": "Siz foydali telegram chatbot bo‘lasiz."},
-                *chat_histories[user.id]  # foydalanuvchi tarixini yuboramiz
+                *chat_histories[user.id]
             ]
         )
 
         bot_reply = response.choices[0].message.content
         await update.message.reply_text(bot_reply)
-
-        # Javobni ham eslab qolamiz
         chat_histories[user.id].append({"role": "assistant", "content": bot_reply})
 
-        # Juda uzun bo‘lsa, xotirani qisqartiramiz
         if len(chat_histories[user.id]) > 20:
             chat_histories[user.id] = chat_histories[user.id][-20:]
 
@@ -106,17 +101,12 @@ async def top(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("📊 Statistika yo‘q.")
         return
 
-    # eng faol 5 foydalanuvchini topamiz
     sorted_users = sorted(user_total_stats.items(), key=lambda x: x[1], reverse=True)[:5]
 
     msg = "📊 Eng faol 5 foydalanuvchi:\n\n"
     for uid, total in sorted_users:
         today_count = user_daily_stats.get(uid, 0)
-        msg += (
-            f"👤 User ID: {uid}\n"
-            f"   📅 Bugun: {today_count} ta\n"
-            f"   📈 Umumiy: {total} ta\n\n"
-        )
+        msg += f"👤 User ID: {uid}\n   📅 Bugun: {today_count} ta\n   📈 Umumiy: {total} ta\n\n"
 
     await update.message.reply_text(msg)
 
@@ -136,7 +126,6 @@ async def ban(update: Update, context: ContextTypes.DEFAULT_TYPE):
         banned_users[uid] = reason
         await update.message.reply_text(f"🚫 Foydalanuvchi {uid} ban qilindi.\n📌 Sababi: {reason}")
 
-        # Foydalanuvchiga xabar yuboramiz
         try:
             await context.bot.send_message(uid, f"⛔ Siz ban olgansiz.\n📌 Sababi: {reason}")
         except Exception as e:
@@ -161,7 +150,6 @@ async def unban(update: Update, context: ContextTypes.DEFAULT_TYPE):
             banned_users.pop(uid)
             await update.message.reply_text(f"✅ Foydalanuvchi {uid} unban qilindi.")
 
-            # Foydalanuvchiga habar yuboramiz
             try:
                 await context.bot.send_message(uid, "✅ Siz bandan chiqdingiz. Endi botdan foydalanishingiz mumkin.")
             except Exception as e:
