@@ -7,7 +7,7 @@ from openai import OpenAI
 from collections import defaultdict
 from datetime import datetime, timedelta
 
-# .env faylni yuklash
+# .env fayldan o'qish
 load_dotenv()
 
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
@@ -17,10 +17,8 @@ ADMIN_ID = int(os.getenv("ADMIN_ID", "0"))
 if not TELEGRAM_TOKEN or not OPENAI_API_KEY:
     raise ValueError("❌ TELEGRAM_TOKEN yoki OPENAI_API_KEY topilmadi!")
 
-# OpenAI client
 client = OpenAI(api_key=OPENAI_API_KEY)
 
-# Logging sozlamalari
 logging.basicConfig(format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO)
 
 # Statistika va xotira
@@ -34,7 +32,7 @@ user_last_messages = defaultdict(list)
 MAX_PER_MINUTE = 3
 DAILY_LIMIT_DEFAULT = 30
 
-# Premium va to‘lovlar
+# Premium foydalanuvchilar va to‘lov holati
 premium_users = {}      # user_id -> paket nomi
 pending_payments = {}   # user_id -> paket tanlangan
 
@@ -43,7 +41,7 @@ packages = {
     "Standart": {"daily_limit": 250, "price": 14990},
 }
 
-# Kundalik limitni yangilash
+# Kundalik hisobni tozalash
 def reset_daily_if_needed():
     global last_stat_date, user_daily_stats
     today = datetime.now().date()
@@ -132,6 +130,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     text = update.message.text
 
+    # Rate limit (1 min da 3ta)
     now = datetime.now()
     user_last_messages[user.id] = [t for t in user_last_messages[user.id] if now - t < timedelta(minutes=1)]
     if len(user_last_messages[user.id]) >= MAX_PER_MINUTE:
@@ -143,6 +142,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(f"⛔ Siz ban olgansiz.\n📌 Sababi: {banned_users[user.id]}")
         return
 
+    # Kunlik limit
     daily_limit = packages[premium_users[user.id]]['daily_limit'] if user.id in premium_users else DAILY_LIMIT_DEFAULT
     if user_daily_stats[user.id] >= daily_limit:
         await update.message.reply_text(f"⚠️ Kunlik limit ({daily_limit} ta) tugadi. /premium orqali paket sotib oling.")
@@ -170,6 +170,8 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(bot_reply)
 
         chat_histories[user.id].append({"role": "assistant", "content": bot_reply})
+
+        # Chat xotira limiti
         max_history = 50 if user.id in premium_users else 20
         if len(chat_histories[user.id]) > max_history:
             chat_histories[user.id] = chat_histories[user.id][-max_history:]
@@ -179,8 +181,4 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text("❌ Hozir API band, iltimos bir ozdan keyin urinib ko‘ring.")
         else:
             logging.error(f"❌ Xatolik: {e}")
-            await update.message.reply_text(f"❌ Kechirasiz, xatolik yuz berdi: {e}")
 
-# /top
-async def top(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    reset_daily_if
