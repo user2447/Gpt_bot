@@ -43,8 +43,8 @@ DAILY_LIMIT_DEFAULT = 30
 
 # Paketlar narxi va limit
 packages = {
-    "Odiy": {"daily_limit": 100, "price": 7990},
-    "Standart": {"daily_limit": 250, "price": 14990},
+    "Odiy": {"daily_limit": 100, "price": 7990, "features": ["Javoblar tezroq", "Chat xotirasi kengaytirilgan", "Reklamasiz ishlash"]},
+    "Standart": {"daily_limit": 250, "price": 14990, "features": ["Javoblar tezroq", "Chat xotirasi kengaytirilgan", "Reklamasiz ishlash", "Maxsus buyruqlar: /summarize, /translate, /askcode"]}
 }
 
 # Kundalik hisobni tozalash
@@ -96,19 +96,13 @@ async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
         expire = premium_users[user_id]['expire'].strftime("%d-%m-%Y")
         status_text = f"⭐ Status: Premium ({package} paketi)"
         daily_limit = packages[package]['daily_limit']
-        extra_info = (
-            f"✅ Sizning paket limitingiz: {daily_limit} ta kunlik savol\n"
-            f"✅ Paket muddati: {expire}\n"
-            "✅ Javoblar tezroq keladi\n"
-            "✅ Chat xotirasi kengaytirilgan\n"
-            "✅ Maxsus buyruqlar: /summarize, /translate, /askcode\n"
-            "✅ Reklamasiz ishlash"
-        )
+        features = "\n".join([f"✅ {f}" for f in packages[package]['features']])
+        extra_info = f"{features}\n📅 Paket muddati: {expire}"
     else:
         status_text = "⭐ Status: Odiy"
         daily_limit = DAILY_LIMIT_DEFAULT
         extra_info = ""
-        if user_daily_stats.get(user_id, 0) >= daily_limit:
+        if daily >= daily_limit:
             extra_info = (
                 "⚠️ Sizning kunlik foydalanish limitingiz tugadi. "
                 "Agar limitni oshirmoqchi bo‘lsangiz /premium orqali paket sotib oling.\n"
@@ -187,34 +181,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(bot_reply)
         chat_histories[user.id].append({"role": "assistant", "content": bot_reply})
 
-        # Premium foydalanuvchi chat xotirasi kengaytirildi
+        # Chat xotirasi
         max_history = 50 if user.id in premium_users else 20
         if len(chat_histories[user.id]) > max_history:
-            chat_histories[user.id] = chat_histories[user.id][-max_history:]
-
-    except Exception as e:
-        if "rate_limit_exceeded" in str(e):
-            await update.message.reply_text("❌ Hozir API band, iltimos bir ozdan keyin urinib ko‘ring.")
-        else:
-            logging.error(f"❌ Xatolik: {e}")
-            await update.message.reply_text(f"❌ Kechirasiz, xatolik yuz berdi: {e}")
-
-# /top komandasi
-async def top(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    reset_daily_if_needed()
-    if update.effective_user.id != ADMIN_ID:
-        await update.message.reply_text("⛔ Siz admin emassiz.")
-        return
-    if not user_total_stats:
-        await update.message.reply_text("📊 Statistika yo‘q.")
-        return
-    sorted_users = sorted(user_total_stats.items(), key=lambda x: x[1], reverse=True)[:5]
-    msg = "📊 Eng faol 5 foydalanuvchi:\n\n"
-    for uid, total in sorted_users:
-        today_count = user_daily_stats.get(uid, 0)
-        msg += f"👤 User ID: {uid}\n   📅 Bugun: {today_count} ta\n   📈 Umumiy: {total} ta\n\n"
-    await update.message.reply_text(msg)
-
-# /ban komandasi
-async def ban(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if update.effective
+            chat_histories[user.id
