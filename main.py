@@ -7,9 +7,8 @@ from openai import OpenAI
 from collections import defaultdict
 from datetime import datetime, timedelta
 
-# .env fayldan o'qish
+# .env o'qish
 load_dotenv()
-
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 ADMIN_ID = int(os.getenv("ADMIN_ID", "0"))
@@ -21,27 +20,23 @@ client = OpenAI(api_key=OPENAI_API_KEY)
 
 logging.basicConfig(format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO)
 
-# Statistika va xotira
 user_total_stats = defaultdict(int)
 user_daily_stats = defaultdict(int)
 last_stat_date = datetime.now().date()
 banned_users = {}
 chat_histories = defaultdict(list)
 user_last_messages = defaultdict(list)
+premium_users = {}
+pending_payments = {}
 
 MAX_PER_MINUTE = 3
 DAILY_LIMIT_DEFAULT = 30
-
-# Premium foydalanuvchilar va to‘lov holati
-premium_users = {}      # user_id -> paket nomi
-pending_payments = {}   # user_id -> paket tanlangan
 
 packages = {
     "Odiy": {"daily_limit": 100, "price": 7990},
     "Standart": {"daily_limit": 250, "price": 14990},
 }
 
-# Kundalik hisobni tozalash
 def reset_daily_if_needed():
     global last_stat_date, user_daily_stats
     today = datetime.now().date()
@@ -49,11 +44,9 @@ def reset_daily_if_needed():
         user_daily_stats = defaultdict(int)
         last_stat_date = today
 
-# /start
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("Salom! Men GPT-4 mini asosidagi Telegram botman 🤖. Savolingizni yozing.")
 
-# /premium
 async def premium(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = []
     msg = "📦 Premium paketlar:\n\n"
@@ -64,7 +57,6 @@ async def premium(update: Update, context: ContextTypes.DEFAULT_TYPE):
     reply_markup = InlineKeyboardMarkup(keyboard)
     await update.message.reply_text(msg, reply_markup=reply_markup)
 
-# Callback (paket tanlash)
 async def premium_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -79,7 +71,6 @@ async def premium_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         ])
     )
 
-# To‘lov tasdiqlash
 async def payment_done_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -98,7 +89,6 @@ async def payment_done_callback(update: Update, context: ContextTypes.DEFAULT_TY
         f"Admin tasdiqlagach, sizga paket beriladi."
     )
 
-# /status
 async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
     reset_daily_if_needed()
     user_id = update.effective_user.id
@@ -118,19 +108,17 @@ async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
                       "   - Reklamasiz ishlash")
         daily_limit = DAILY_LIMIT_DEFAULT
 
-    limit_msg = f"⚠️ Sizning kunlik foydalanish limitingiz tugadi. /premium orqali paket sotib oling." \
-        if daily >= daily_limit else f"📅 Bugungi ishlatilgan so‘rov: {daily} ta / Kunlik limit: {daily_limit} ta"
+    limit_msg = (f"⚠️ Sizning kunlik foydalanish limitingiz tugadi. /premium orqali paket sotib oling."
+                 if daily >= daily_limit else f"📅 Bugungi ishlatilgan so‘rov: {daily} ta / Kunlik limit: {daily_limit} ta")
 
     msg = f"👤 Ism: {user_name}\n🆔 ID: {user_id}\n{status_text}\n{limit_msg}\n\n{extra_info}"
     await update.message.reply_text(msg)
 
-# Xabarlarni qayta ishlash
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     reset_daily_if_needed()
     user = update.effective_user
     text = update.message.text
 
-    # Rate limit (1 min da 3ta)
     now = datetime.now()
     user_last_messages[user.id] = [t for t in user_last_messages[user.id] if now - t < timedelta(minutes=1)]
     if len(user_last_messages[user.id]) >= MAX_PER_MINUTE:
@@ -142,7 +130,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(f"⛔ Siz ban olgansiz.\n📌 Sababi: {banned_users[user.id]}")
         return
 
-    # Kunlik limit
     daily_limit = packages[premium_users[user.id]]['daily_limit'] if user.id in premium_users else DAILY_LIMIT_DEFAULT
     if user_daily_stats[user.id] >= daily_limit:
         await update.message.reply_text(f"⚠️ Kunlik limit ({daily_limit} ta) tugadi. /premium orqali paket sotib oling.")
@@ -159,7 +146,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
 
     chat_histories[user.id].append({"role": "user", "content": text})
-
     try:
         system_message = f"Siz foydali Telegram chatbot bo‘lasiz. Hozirgi yil {datetime.now().year}."
         response = client.chat.completions.create(
@@ -170,15 +156,29 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(bot_reply)
 
         chat_histories[user.id].append({"role": "assistant", "content": bot_reply})
-
-        # Chat xotira limiti
         max_history = 50 if user.id in premium_users else 20
         if len(chat_histories[user.id]) > max_history:
             chat_histories[user.id] = chat_histories[user.id][-max_history:]
-
     except Exception as e:
         if "rate_limit_exceeded" in str(e):
             await update.message.reply_text("❌ Hozir API band, iltimos bir ozdan keyin urinib ko‘ring.")
         else:
             logging.error(f"❌ Xatolik: {e}")
+            await update.message.reply_text(f"❌ Kechirasiz, xatolik yuz berdi: {e}")
 
+# Bot ishga tushirish
+def main():
+    app = Application.builder().token(TELEGRAM_TOKEN).build()
+
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(CommandHandler("premium", premium))
+    app.add_handler(CommandHandler("status", status))
+    app.add_handler(CallbackQueryHandler(premium_callback, pattern=r"^premium_"))
+    app.add_handler(CallbackQueryHandler(payment_done_callback, pattern=r"^payment_done$"))
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+
+    logging.info("🤖 Bot ishga tushdi!")
+    app.run_polling()
+
+if __name__ == "__main__":
+    main()
