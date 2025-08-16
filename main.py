@@ -86,7 +86,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     except Exception as e:
         logging.error(f"❌ Xatolik: {e}")
-        await update.message.reply_text("❌ Kechirasiz, biror xatolik yuz berdi.")
+        await update.message.reply_text(f"❌ Kechirasiz, xatolik yuz berdi: {e}")
 
 # /top komandasi
 async def top(update: Update, context: ContextTypes.DEFAULT_TYPE):
