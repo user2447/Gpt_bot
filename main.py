@@ -182,8 +182,4 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text("❌ Hozir API band, iltimos bir ozdan keyin urinib ko‘ring.")
         else:
             logging.error(f"❌ Xatolik: {e}")
-            await update.message.reply_text(f"❌ Kechirasiz, xatolik yuz berdi: {e}")
-
-# /top
-async def top(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    reset_daily
+            await update.message.reply_text
