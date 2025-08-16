@@ -197,4 +197,24 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text("❌ Hozir API band, iltimos bir ozdan keyin urinib ko‘ring.")
         else:
             logging.error(f"❌ Xatolik: {e}")
-            await
+            await update.message.reply_text(f"❌ Kechirasiz, xatolik yuz berdi: {e}")
+
+# /top komandasi
+async def top(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    reset_daily_if_needed()
+    if update.effective_user.id != ADMIN_ID:
+        await update.message.reply_text("⛔ Siz admin emassiz.")
+        return
+    if not user_total_stats:
+        await update.message.reply_text("📊 Statistika yo‘q.")
+        return
+    sorted_users = sorted(user_total_stats.items(), key=lambda x: x[1], reverse=True)[:5]
+    msg = "📊 Eng faol 5 foydalanuvchi:\n\n"
+    for uid, total in sorted_users:
+        today_count = user_daily_stats.get(uid, 0)
+        msg += f"👤 User ID: {uid}\n   📅 Bugun: {today_count} ta\n   📈 Umumiy: {total} ta\n\n"
+    await update.message.reply_text(msg)
+
+# /ban komandasi
+async def ban(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.effective
