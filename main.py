@@ -46,16 +46,20 @@ def reset_daily_if_needed():
         user_daily_stats = defaultdict(int)
         last_stat_date = today
 
-# /start
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+# Chap tomondagi kichik menyu
+def main_menu_keyboard():
     keyboard = [
         [InlineKeyboardButton("📦 Premium Paketlar", callback_data="menu_premium")],
         [InlineKeyboardButton("📊 Status", callback_data="menu_status")]
     ]
-    reply_markup = InlineKeyboardMarkup(keyboard)
+    return InlineKeyboardMarkup(keyboard)
+
+# /start
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
-        "Salom! Men GPT-4 mini asosidagi Telegram botman 🤖. Quyidagi tugmalar orqali boshqarishingiz mumkin.",
-        reply_markup=reply_markup
+        "Salom! Men GPT-4 mini asosidagi Telegram botman 🤖.\n"
+        "Chap tomondagi menyu orqali Premium paketlar va Statusni ko‘rishingiz mumkin.",
+        reply_markup=main_menu_keyboard()
     )
 
 # /premium
@@ -69,14 +73,21 @@ async def premium(update: Update, context: ContextTypes.DEFAULT_TYPE):
     reply_markup = InlineKeyboardMarkup(keyboard)
     await update.message.reply_text(msg, reply_markup=reply_markup)
 
-# Callback paket tanlash
+# Callback paket tanlash va status
 async def premium_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
-    if query.data.startswith("premium_"):
+    user_id = query.from_user.id
+
+    # Menu tanlovlari
+    if query.data == "menu_premium":
+        await premium(update, context)
+    elif query.data == "menu_status":
+        await status(update, context)
+    elif query.data.startswith("premium_"):
         package_name = query.data.replace("premium_", "")
-        pending_payments[query.from_user.id] = package_name
-        photo_pending[query.from_user.id] = True
+        pending_payments[user_id] = package_name
+        photo_pending[user_id] = True
         await query.edit_message_text(
             f"✅ Siz tanladingiz: {package_name} paketi.\n"
             f"To‘lov summasi: {packages[package_name]['price']} so‘m\n"
@@ -86,7 +97,6 @@ async def premium_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             ])
         )
     elif query.data == "payment_done":
-        user_id = query.from_user.id
         if user_id not in pending_payments:
             await query.edit_message_text("⚠️ Hech qanday paket tanlanmagan yoki to‘lov summasi mavjud emas.")
             return
@@ -178,7 +188,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 messages=[{"role": "system", "content": system_message}, *chat_histories[user.id]]
             )
             bot_reply = response.choices[0].message.content
-            await update.message.reply_text(bot_reply)
+            await update.message.reply_text(bot_reply, reply_markup=main_menu_keyboard())
             chat_histories[user.id].append({"role": "assistant", "content": bot_reply})
             max_history = 50 if user.id in premium_users else 20
             if len(chat_histories[user.id]) > max_history:
