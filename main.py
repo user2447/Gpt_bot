@@ -6,6 +6,7 @@ from telegram.ext import Application, CommandHandler, MessageHandler, filters, C
 from openai import OpenAI
 from collections import defaultdict
 from datetime import datetime, timedelta
+import asyncio
 
 # .env o'qish
 load_dotenv()
@@ -166,7 +167,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         try:
             system_message = f"Siz foydali Telegram chatbot bo‘lasiz. Hozirgi yil {datetime.now().year}."
             response = client.chat.completions.create(
-                model="gpt-4o-mini",  # To'g'ri model ishlaydi
+                model="gpt-4o-mini",
                 messages=[{"role": "system", "content": system_message}, *chat_histories[user.id]]
             )
             bot_reply = response.choices[0].message.content
@@ -189,7 +190,6 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
         photo_file = await update.message.photo[-1].get_file()
         file_path = f"{user_id}_check.jpg"
         await photo_file.download_to_drive(file_path)
-        # Adminga telegramda yuborish
         await context.bot.send_photo(ADMIN_ID, photo=open(file_path, "rb"),
                                      caption=f"📸 Foydalanuvchi {update.effective_user.full_name} ({user_id}) chek yubordi.")
         await update.message.reply_text("✅ Rasm qabul qilindi. Admin tasdiqlagach paket beriladi.")
@@ -197,7 +197,7 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         await update.message.reply_text("⚠️ Siz hali paket tanlamagansiz yoki chek yuborish shart emas.")
 
-# Bot ishga tushirish
+# Bot ishga tushirish - polling bilan Railway-da doimiy ishlash
 async def main():
     app = Application.builder().token(TELEGRAM_TOKEN).build()
 
@@ -210,11 +210,15 @@ async def main():
     app.add_handler(MessageHandler(filters.PHOTO, handle_photo))
 
     logging.info("🤖 Bot ishga tushdi!")
+
+    # Railway uchun polling + idle
     await app.initialize()
     await app.start()
     await app.updater.start_polling()
-    await app.updater.idle()  # konteyner Railway-da to‘xtamasligi uchun
+    try:
+        await app.updater.idle()
+    except asyncio.CancelledError:
+        logging.info("⚠️ Bot idle CancelledError qaytdi, lekin bu normal.")
 
 if __name__ == "__main__":
-    import asyncio
     asyncio.run(main())
