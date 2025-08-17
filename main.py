@@ -1,18 +1,17 @@
 import os
 import logging
-from dotenv import load_dotenv
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes, CallbackQueryHandler
 from openai import OpenAI
 from collections import defaultdict
 from datetime import datetime, timedelta
 
-# .env o'qish
-load_dotenv()
+# Environment variables
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 ADMIN_ID = int(os.getenv("ADMIN_ID", "0"))
-RAILWAY_URL = os.getenv("RAILWAY_URL")  # Masalan: https://your-project.up.railway.app
+RAILWAY_URL = os.getenv("RAILWAY_URL")  # e.g. https://gptbot-production-fcbd.up.railway.app
+PORT = int(os.getenv("PORT", "1234"))
 
 if not TELEGRAM_TOKEN or not OPENAI_API_KEY or not RAILWAY_URL:
     raise ValueError("❌ TELEGRAM_TOKEN, OPENAI_API_KEY yoki RAILWAY_URL topilmadi!")
@@ -28,9 +27,9 @@ last_stat_date = datetime.now().date()
 banned_users = {}
 chat_histories = defaultdict(list)
 user_last_messages = defaultdict(list)
-premium_users = {}      # user_id -> paket nomi
-pending_payments = {}   # user_id -> tanlangan paket
-photo_pending = {}      # user_id -> True/False rasm kutish
+premium_users = {}
+pending_payments = {}
+photo_pending = {}
 
 MAX_PER_MINUTE = 3
 DAILY_LIMIT_DEFAULT = 30
@@ -40,7 +39,7 @@ packages = {
     "Standart": {"daily_limit": 250, "price": 14990},
 }
 
-CARD_NUMBER = "9860190101371507 Xilola Akamuratova"  # Karta raqami
+CARD_NUMBER = "9860190101371507 Xilola Akamuratova"
 
 def reset_daily_if_needed():
     global last_stat_date, user_daily_stats
@@ -63,11 +62,11 @@ async def premium(update: Update, context: ContextTypes.DEFAULT_TYPE):
         [InlineKeyboardButton(f"Standart paket: {packages['Standart']['price']} so'm", callback_data="premium_Standart")]
     ]
     await update.message.reply_text(
-        "📦 Premium paketlar:\n\nOdiy va Standart paketlardan birini tanlang:", 
+        "📦 Premium paketlar:\n\nOdiy va Standart paketlardan birini tanlang:",
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
 
-# Callback paket tanlash va to‘lov
+# Callback
 async def premium_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -87,7 +86,6 @@ async def premium_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 [InlineKeyboardButton("To‘landi ✅", callback_data="payment_done")]
             ])
         )
-
     elif query.data == "payment_done":
         if user_id not in pending_payments:
             await query.edit_message_text("⚠️ Hech qanday paket tanlanmagan.")
@@ -97,7 +95,7 @@ async def premium_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "Iltimos, chek rasmini yuboring. Admin tasdiqlagach paket beriladi."
         )
 
-# /givepremium id paket
+# /givepremium
 async def give_premium(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id != ADMIN_ID:
         await update.message.reply_text("⚠️ Siz admin emassiz.")
@@ -108,7 +106,7 @@ async def give_premium(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     user_id, package_name = args
     if package_name not in packages:
-        await update.message.reply_text("❌ Paket noto‘g‘ri. Odiy yoki Standart bo‘lishi kerak.")
+        await update.message.reply_text("❌ Paket noto‘g‘ri.")
         return
     user_id = int(user_id)
     premium_users[user_id] = package_name
@@ -135,7 +133,7 @@ async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
     msg = f"👤 Ism: {user_name}\n🆔 ID: {user_id}\n{status_text}\n{limit_msg}\n\n{extra_info}"
     await update.message.reply_text(msg)
 
-# Xabarlar handler
+# Xabarlar
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     reset_daily_if_needed()
     user = update.effective_user
@@ -183,7 +181,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 logging.error(f"❌ Xatolik: {e}")
                 await update.message.reply_text(f"❌ Kechirasiz, xatolik yuz berdi: {e}")
 
-# Rasm handler - chek rasmini adminga yuborish
+# Rasm handler
 async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     if user_id in photo_pending and photo_pending[user_id]:
@@ -197,26 +195,6 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         await update.message.reply_text("⚠️ Siz hali paket tanlamagansiz yoki chek yuborish shart emas.")
 
-# Bot ishga tushirish - Webhook Railway-da
+# Ishga tushirish - Webhook Railway
 async def main():
-    app = Application.builder().token(TELEGRAM_TOKEN).build()
-
-    app.add_handler(CommandHandler("start", start))
-    app.add_handler(CommandHandler("premium", premium))
-    app.add_handler(CommandHandler("status", status))
-    app.add_handler(CommandHandler("givepremium", give_premium))
-    app.add_handler(CallbackQueryHandler(premium_callback))
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
-    app.add_handler(MessageHandler(filters.PHOTO, handle_photo))
-
-    logging.info("🤖 Bot ishga tushdi! Webhook ishlamoqda...")
-
-    # Railway uchun Webhook sozlash
-    await app.initialize()
-    await app.start()
-    await app.bot.set_webhook(f"{RAILWAY_URL}/{TELEGRAM_TOKEN}")
-    await app.updater.idle()
-
-if __name__ == "__main__":
-    import asyncio
-    asyncio.run(main())
+    app = Application.builder().token
