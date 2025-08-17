@@ -10,11 +10,9 @@ from datetime import datetime, timedelta
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 ADMIN_ID = int(os.getenv("ADMIN_ID", "0"))
-RAILWAY_URL = os.getenv("RAILWAY_URL")  # e.g. https://gptbot-production-fcbd.up.railway.app
-PORT = int(os.getenv("PORT", "1234"))
 
-if not TELEGRAM_TOKEN or not OPENAI_API_KEY or not RAILWAY_URL:
-    raise ValueError("❌ TELEGRAM_TOKEN, OPENAI_API_KEY yoki RAILWAY_URL topilmadi!")
+if not TELEGRAM_TOKEN or not OPENAI_API_KEY:
+    raise ValueError("❌ TELEGRAM_TOKEN yoki OPENAI_API_KEY topilmadi!")
 
 client = OpenAI(api_key=OPENAI_API_KEY)
 
@@ -175,11 +173,8 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             if len(chat_histories[user.id]) > max_history:
                 chat_histories[user.id] = chat_histories[user.id][-max_history:]
         except Exception as e:
-            if "rate_limit_exceeded" in str(e):
-                await update.message.reply_text("❌ Hozir API band, iltimos bir ozdan keyin urinib ko‘ring.")
-            else:
-                logging.error(f"❌ Xatolik: {e}")
-                await update.message.reply_text(f"❌ Kechirasiz, xatolik yuz berdi: {e}")
+            logging.error(f"❌ Xatolik: {e}")
+            await update.message.reply_text(f"❌ Kechirasiz, xatolik yuz berdi: {e}")
 
 # Rasm handler
 async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -195,6 +190,20 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         await update.message.reply_text("⚠️ Siz hali paket tanlamagansiz yoki chek yuborish shart emas.")
 
-# Ishga tushirish - Webhook Railway
-async def main():
-    app = Application.builder().token
+# Bot ishga tushirish (polling)
+def main():
+    app = Application.builder().token(TELEGRAM_TOKEN).build()
+
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(CommandHandler("premium", premium))
+    app.add_handler(CommandHandler("status", status))
+    app.add_handler(CommandHandler("givepremium", give_premium))
+    app.add_handler(CallbackQueryHandler(premium_callback))
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+    app.add_handler(MessageHandler(filters.PHOTO, handle_photo))
+
+    logging.info("🤖 Bot ishga tushdi! Polling ishlamoqda...")
+    app.run_polling()
+
+if __name__ == "__main__":
+    main()
