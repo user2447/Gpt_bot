@@ -28,7 +28,7 @@ banned_users = {}
 chat_histories = defaultdict(list)
 user_last_messages = defaultdict(list)
 premium_users = {}      # user_id -> paket nomi
-pending_payments = {}   # user_id -> paket tanlangan
+pending_payments = {}   # user_id -> tanlangan paket
 photo_pending = {}      # user_id -> True/False rasm kutish
 
 MAX_PER_MINUTE = 3
@@ -53,32 +53,47 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "Siz /premium yoki /status komandalarini yozib ishlatishingiz mumkin."
     )
 
-# /premium - faqat tariflar va paketlar
+# /premium
 async def premium(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    msg = "📦 Premium paketlar:\n\n"
-    for name, info in packages.items():
-        msg += f"{name} paket: Kunlik {info['daily_limit']} ta savol - Narxi: {info['price']} so‘m\n"
-    msg += "\n💳 To‘lov uchun karta: 9860190101371507 Xilola Akamuratova\n⚠️ Chek yuborilishi shart, aks holda premium berilmaydi."
-    await update.message.reply_text(msg)
+    keyboard = [
+        [InlineKeyboardButton(f"Odiy paket: {packages['Odiy']['price']} so'm", callback_data="premium_Odiy")],
+        [InlineKeyboardButton(f"Standart paket: {packages['Standart']['price']} so'm", callback_data="premium_Standart")]
+    ]
+    await update.message.reply_text("📦 Premium paketlar:\n\nOdiy va Standart paketlardan birini tanlang:", 
+                                    reply_markup=InlineKeyboardMarkup(keyboard))
 
-# /status
-async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    reset_daily_if_needed()
-    user_id = update.effective_user.id
-    user_name = update.effective_user.full_name
-    daily = user_daily_stats.get(user_id, 0)
-    if user_id in premium_users:
-        status_text = f"⭐ Status: Premium ({premium_users[user_id]} paketi)"
-        extra_info = "✅ Paket limitingiz oshirilgan, javoblar tezroq keladi, chat xotirasi kengaytirilgan va reklamasiz ishlaydi."
-        daily_limit = packages[premium_users[user_id]]['daily_limit']
-    else:
-        status_text = "⭐ Status: Odiy"
-        extra_info = "💡 Siz premium paket xarid qilishingiz mumkin."
-        daily_limit = DAILY_LIMIT_DEFAULT
-    limit_msg = (f"⚠️ Sizning kunlik foydalanish limitingiz tugadi. /premium orqali paket sotib oling."
-                 if daily >= daily_limit else f"📅 Bugungi ishlatilgan so‘rov: {daily} ta / Kunlik limit: {daily_limit} ta")
-    msg = f"👤 Ism: {user_name}\n🆔 ID: {user_id}\n{status_text}\n{limit_msg}\n\n{extra_info}"
-    await update.message.reply_text(msg)
+# Callback paket tanlash va to‘lov
+async def premium_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    user_id = query.from_user.id
+
+    if query.data.startswith("premium_"):
+        package_name = query.data.replace("premium_", "")
+        pending_payments[user_id] = package_name
+        photo_pending[user_id] = True
+        price = packages[package_name]['price']
+        await query.edit_message_text(
+            f"✅ Siz tanladingiz: {package_name} paketi\n"
+            f"💳 To‘lov summasi: {price} so‘m\n"
+            "To‘lov qilganingizni tasdiqlash uchun tugmani bosing:",
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("To‘landi ✅", callback_data="payment_done")]
+            ])
+        )
+    elif query.data == "payment_done":
+        if user_id not in pending_payments:
+            await query.edit_message_text("⚠️ Hech qanday paket tanlanmagan.")
+            return
+        package_name = pending_payments[user_id]
+        await context.bot.send_message(
+            ADMIN_ID,
+            f"💳 Foydalanuvchi {query.from_user.full_name} ({user_id}) "
+            f"{package_name} paketini to‘lov qilganligini tasdiqlash uchun chek kutyapti."
+        )
+        await query.edit_message_text(
+            f"✅ To‘lov tugmasi bosildi. Iltimos, chek rasmini yuboring. Admin tasdiqlagach paket beriladi."
+        )
 
 # /givepremium id paket
 async def give_premium(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -99,37 +114,24 @@ async def give_premium(update: Update, context: ContextTypes.DEFAULT_TYPE):
         del pending_payments[user_id]
     await update.message.reply_text(f"✅ Foydalanuvchiga {package_name} paketi berildi.")
 
-# Callback paket tanlash va to'lov
-async def premium_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
-    user_id = query.from_user.id
-
-    if query.data.startswith("premium_"):
-        package_name = query.data.replace("premium_", "")
-        pending_payments[user_id] = package_name
-        photo_pending[user_id] = True
-        await query.edit_message_text(
-            f"✅ Siz tanladingiz: {package_name} paketi.\n"
-            f"To‘lov summasi: {packages[package_name]['price']} so‘m\n"
-            f"To‘lov qilganingizni tasdiqlash uchun tugmani bosing:",
-            reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton("To‘lov qilindi ✅", callback_data="payment_done")]
-            ])
-        )
-    elif query.data == "payment_done":
-        if user_id not in pending_payments:
-            await query.edit_message_text("⚠️ Hech qanday paket tanlanmagan yoki to‘lov summasi mavjud emas.")
-            return
-        package_name = pending_payments[user_id]
-        await context.bot.send_message(
-            ADMIN_ID,
-            f"💳 Foydalanuvchi {query.from_user.full_name} ({user_id}) "
-            f"{package_name} paketini to‘lov qilganligini tasdiqlash uchun chek kutyapti."
-        )
-        await query.edit_message_text(
-            f"✅ Siz to‘lov tugmasini bosdingiz. Iltimos, chek rasmini yuboring. Admin tasdiqlagach, sizga paket beriladi."
-        )
+# /status
+async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    reset_daily_if_needed()
+    user_id = update.effective_user.id
+    user_name = update.effective_user.full_name
+    daily = user_daily_stats.get(user_id, 0)
+    if user_id in premium_users:
+        status_text = f"⭐ Status: Premium ({premium_users[user_id]} paketi)"
+        extra_info = "✅ Paket limitingiz oshirilgan, javoblar tezroq keladi, chat xotirasi kengaytirilgan va reklamasiz ishlaydi."
+        daily_limit = packages[premium_users[user_id]]['daily_limit']
+    else:
+        status_text = "⭐ Status: Odiy"
+        extra_info = "💡 Siz premium paket xarid qilishingiz mumkin."
+        daily_limit = DAILY_LIMIT_DEFAULT
+    limit_msg = (f"⚠️ Sizning kunlik foydalanish limitingiz tugadi. /premium orqali paket sotib oling."
+                 if daily >= daily_limit else f"📅 Bugungi ishlatilgan so‘rov: {daily} ta / Kunlik limit: {daily_limit} ta")
+    msg = f"👤 Ism: {user_name}\n🆔 ID: {user_id}\n{status_text}\n{limit_msg}\n\n{extra_info}"
+    await update.message.reply_text(msg)
 
 # Xabarlar handler
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -179,14 +181,17 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 logging.error(f"❌ Xatolik: {e}")
                 await update.message.reply_text(f"❌ Kechirasiz, xatolik yuz berdi: {e}")
 
-# Rasm handler
+# Rasm handler - chek rasmini adminga yuborish
 async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
-    photo_file = await update.message.photo[-1].get_file()
-    await photo_file.download_to_drive(f"{user_id}_check.jpg")
-    # Adminga xabar berish
-    await context.bot.send_message(ADMIN_ID, f"📸 Foydalanuvchi {update.effective_user.full_name} ({user_id}) rasm yubordi.")
-    await update.message.reply_text("✅ Rasm qabul qilindi va adminga yuborildi.")
+    if user_id in photo_pending and photo_pending[user_id]:
+        photo_file = await update.message.photo[-1].get_file()
+        await photo_file.download_to_drive(f"{user_id}_check.jpg")
+        await context.bot.send_message(ADMIN_ID, f"📸 Foydalanuvchi {update.effective_user.full_name} ({user_id}) chek yubordi.")
+        await update.message.reply_text("✅ Rasm qabul qilindi. Admin tasdiqlagach paket beriladi.")
+        photo_pending[user_id] = False
+    else:
+        await update.message.reply_text("⚠️ Siz hali paket tanlamagansiz yoki chek yuborish shart emas.")
 
 # Bot ishga tushirish
 def main():
