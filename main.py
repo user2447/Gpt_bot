@@ -61,8 +61,10 @@ async def premium(update: Update, context: ContextTypes.DEFAULT_TYPE):
         [InlineKeyboardButton(f"Odiy paket: {packages['Odiy']['price']} so'm", callback_data="premium_Odiy")],
         [InlineKeyboardButton(f"Standart paket: {packages['Standart']['price']} so'm", callback_data="premium_Standart")]
     ]
-    await update.message.reply_text("📦 Premium paketlar:\n\nOdiy va Standart paketlardan birini tanlang:", 
-                                    reply_markup=InlineKeyboardMarkup(keyboard))
+    await update.message.reply_text(
+        "📦 Premium paketlar:\n\nOdiy va Standart paketlardan birini tanlang:", 
+        reply_markup=InlineKeyboardMarkup(keyboard)
+    )
 
 # Callback paket tanlash va to‘lov
 async def premium_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -75,7 +77,6 @@ async def premium_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         pending_payments[user_id] = package_name
         photo_pending[user_id] = True
         price = packages[package_name]['price']
-        # Karta ma'lumotlari va summani avval ko'rsatamiz
         await query.edit_message_text(
             f"✅ Siz tanladingiz: {package_name} paketi\n"
             f"💳 To‘lov summasi: {price} so‘m\n"
@@ -181,4 +182,39 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 logging.error(f"❌ Xatolik: {e}")
                 await update.message.reply_text(f"❌ Kechirasiz, xatolik yuz berdi: {e}")
 
-# Rasm handler - chek ras
+# Rasm handler - chek rasmini adminga yuborish
+async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    if user_id in photo_pending and photo_pending[user_id]:
+        photo_file = await update.message.photo[-1].get_file()
+        file_path = f"{user_id}_check.jpg"
+        await photo_file.download_to_drive(file_path)
+        # Adminga telegramda yuborish
+        await context.bot.send_photo(ADMIN_ID, photo=open(file_path, "rb"),
+                                     caption=f"📸 Foydalanuvchi {update.effective_user.full_name} ({user_id}) chek yubordi.")
+        await update.message.reply_text("✅ Rasm qabul qilindi. Admin tasdiqlagach paket beriladi.")
+        photo_pending[user_id] = False
+    else:
+        await update.message.reply_text("⚠️ Siz hali paket tanlamagansiz yoki chek yuborish shart emas.")
+
+# Bot ishga tushirish
+async def main():
+    app = Application.builder().token(TELEGRAM_TOKEN).build()
+
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(CommandHandler("premium", premium))
+    app.add_handler(CommandHandler("status", status))
+    app.add_handler(CommandHandler("givepremium", give_premium))
+    app.add_handler(CallbackQueryHandler(premium_callback))
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+    app.add_handler(MessageHandler(filters.PHOTO, handle_photo))
+
+    logging.info("🤖 Bot ishga tushdi!")
+    await app.initialize()
+    await app.start()
+    await app.updater.start_polling()
+    await app.updater.idle()  # konteyner Railway-da to‘xtamasligi uchun
+
+if __name__ == "__main__":
+    import asyncio
+    asyncio.run(main())
