@@ -6,16 +6,16 @@ from telegram.ext import Application, CommandHandler, MessageHandler, filters, C
 from openai import OpenAI
 from collections import defaultdict
 from datetime import datetime, timedelta
-import asyncio
 
 # .env o'qish
 load_dotenv()
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 ADMIN_ID = int(os.getenv("ADMIN_ID", "0"))
+RAILWAY_URL = os.getenv("RAILWAY_URL")  # Masalan: https://your-project.up.railway.app
 
-if not TELEGRAM_TOKEN or not OPENAI_API_KEY:
-    raise ValueError("❌ TELEGRAM_TOKEN yoki OPENAI_API_KEY topilmadi!")
+if not TELEGRAM_TOKEN or not OPENAI_API_KEY or not RAILWAY_URL:
+    raise ValueError("❌ TELEGRAM_TOKEN, OPENAI_API_KEY yoki RAILWAY_URL topilmadi!")
 
 client = OpenAI(api_key=OPENAI_API_KEY)
 
@@ -197,7 +197,7 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         await update.message.reply_text("⚠️ Siz hali paket tanlamagansiz yoki chek yuborish shart emas.")
 
-# Bot ishga tushirish - polling bilan Railway-da doimiy ishlash
+# Bot ishga tushirish - Webhook Railway-da
 async def main():
     app = Application.builder().token(TELEGRAM_TOKEN).build()
 
@@ -209,16 +209,14 @@ async def main():
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     app.add_handler(MessageHandler(filters.PHOTO, handle_photo))
 
-    logging.info("🤖 Bot ishga tushdi!")
+    logging.info("🤖 Bot ishga tushdi! Webhook ishlamoqda...")
 
-    # Railway uchun polling + idle
+    # Railway uchun Webhook sozlash
     await app.initialize()
     await app.start()
-    await app.updater.start_polling()
-    try:
-        await app.updater.idle()
-    except asyncio.CancelledError:
-        logging.info("⚠️ Bot idle CancelledError qaytdi, lekin bu normal.")
+    await app.bot.set_webhook(f"{RAILWAY_URL}/{TELEGRAM_TOKEN}")
+    await app.updater.idle()
 
 if __name__ == "__main__":
+    import asyncio
     asyncio.run(main())
