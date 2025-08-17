@@ -39,6 +39,8 @@ packages = {
     "Standart": {"daily_limit": 250, "price": 14990},
 }
 
+CARD_NUMBER = "9860190101371507 Xilola Akamuratova"  # Karta raqami
+
 def reset_daily_if_needed():
     global last_stat_date, user_daily_stats
     today = datetime.now().date()
@@ -73,26 +75,25 @@ async def premium_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         pending_payments[user_id] = package_name
         photo_pending[user_id] = True
         price = packages[package_name]['price']
+        # Karta ma'lumotlari va summani avval ko'rsatamiz
         await query.edit_message_text(
             f"✅ Siz tanladingiz: {package_name} paketi\n"
             f"💳 To‘lov summasi: {price} so‘m\n"
+            f"💳 To‘lash uchun karta: {CARD_NUMBER}\n\n"
             "To‘lov qilganingizni tasdiqlash uchun tugmani bosing:",
             reply_markup=InlineKeyboardMarkup([
                 [InlineKeyboardButton("To‘landi ✅", callback_data="payment_done")]
             ])
         )
+
     elif query.data == "payment_done":
         if user_id not in pending_payments:
             await query.edit_message_text("⚠️ Hech qanday paket tanlanmagan.")
             return
         package_name = pending_payments[user_id]
-        await context.bot.send_message(
-            ADMIN_ID,
-            f"💳 Foydalanuvchi {query.from_user.full_name} ({user_id}) "
-            f"{package_name} paketini to‘lov qilganligini tasdiqlash uchun chek kutyapti."
-        )
         await query.edit_message_text(
-            f"✅ To‘lov tugmasi bosildi. Iltimos, chek rasmini yuboring. Admin tasdiqlagach paket beriladi."
+            "✅ To‘lov tugmasi bosildi.\n"
+            "Iltimos, chek rasmini yuboring. Admin tasdiqlagach paket beriladi."
         )
 
 # /givepremium id paket
