@@ -33,8 +33,24 @@ MAX_PER_MINUTE = 3
 DAILY_LIMIT_DEFAULT = 30
 
 packages = {
-    "Odiy": {"daily_limit": 100, "price": 7990},
-    "Standart": {"daily_limit": 250, "price": 14990},
+    "Odiy": {
+        "daily_limit": 100,
+        "price": 7990,
+        "features": [
+            "⏱ Javob tezligi: odiy",
+            "💬 Chat xotirasi: 20 ta oxirgi xabar",
+            "📢 Reklamasiz ishlash: ❌"
+        ]
+    },
+    "Standart": {
+        "daily_limit": 250,
+        "price": 14990,
+        "features": [
+            "⏱ Javob tezligi: tezroq",
+            "💬 Chat xotirasi: 50 ta oxirgi xabar",
+            "📢 Reklamasiz ishlash: ✅"
+        ]
+    },
 }
 
 CARD_NUMBER = "9860190101371507 Xilola Akamuratova"
@@ -60,7 +76,7 @@ async def premium(update: Update, context: ContextTypes.DEFAULT_TYPE):
         [InlineKeyboardButton(f"Standart paket: {packages['Standart']['price']} so'm", callback_data="premium_Standart")]
     ]
     await update.message.reply_text(
-        "📦 Premium paketlar:\n\nOdiy va Standart paketlardan birini tanlang:",
+        "📦 Premium paketlar:\n\nOdiy va Standart paketlardan birini tanlang:", 
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
 
@@ -74,11 +90,14 @@ async def premium_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         package_name = query.data.replace("premium_", "")
         pending_payments[user_id] = package_name
         photo_pending[user_id] = True
-        price = packages[package_name]['price']
+        package = packages[package_name]
+        features_text = "\n".join(package["features"])
         await query.edit_message_text(
             f"✅ Siz tanladingiz: {package_name} paketi\n"
-            f"💳 To‘lov summasi: {price} so‘m\n"
+            f"💳 To‘lov summasi: {package['price']} so‘m\n"
             f"💳 To‘lash uchun karta: {CARD_NUMBER}\n\n"
+            f"📋 Paket ichidagi imkoniyatlar:\n{features_text}\n"
+            f"⚡ Kunlik savollar limiti: {package['daily_limit']} ta\n\n"
             "To‘lov qilganingizni tasdiqlash uchun tugmani bosing:",
             reply_markup=InlineKeyboardMarkup([
                 [InlineKeyboardButton("To‘landi ✅", callback_data="payment_done")]
