@@ -90,7 +90,6 @@ async def premium_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if user_id not in pending_payments:
             await query.edit_message_text("⚠️ Hech qanday paket tanlanmagan.")
             return
-        package_name = pending_payments[user_id]
         await query.edit_message_text(
             "✅ To‘lov tugmasi bosildi.\n"
             "Iltimos, chek rasmini yuboring. Admin tasdiqlagach paket beriladi."
@@ -166,7 +165,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         try:
             system_message = f"Siz foydali Telegram chatbot bo‘lasiz. Hozirgi yil {datetime.now().year}."
             response = client.chat.completions.create(
-                model="gpt-4o-mini",
+                model="gpt-4o-mini",  # To'g'ri model ishlaydi
                 messages=[{"role": "system", "content": system_message}, *chat_histories[user.id]]
             )
             bot_reply = response.choices[0].message.content
@@ -182,32 +181,4 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 logging.error(f"❌ Xatolik: {e}")
                 await update.message.reply_text(f"❌ Kechirasiz, xatolik yuz berdi: {e}")
 
-# Rasm handler - chek rasmini adminga yuborish
-async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.effective_user.id
-    if user_id in photo_pending and photo_pending[user_id]:
-        photo_file = await update.message.photo[-1].get_file()
-        await photo_file.download_to_drive(f"{user_id}_check.jpg")
-        await context.bot.send_message(ADMIN_ID, f"📸 Foydalanuvchi {update.effective_user.full_name} ({user_id}) chek yubordi.")
-        await update.message.reply_text("✅ Rasm qabul qilindi. Admin tasdiqlagach paket beriladi.")
-        photo_pending[user_id] = False
-    else:
-        await update.message.reply_text("⚠️ Siz hali paket tanlamagansiz yoki chek yuborish shart emas.")
-
-# Bot ishga tushirish
-def main():
-    app = Application.builder().token(TELEGRAM_TOKEN).build()
-
-    app.add_handler(CommandHandler("start", start))
-    app.add_handler(CommandHandler("premium", premium))
-    app.add_handler(CommandHandler("status", status))
-    app.add_handler(CommandHandler("givepremium", give_premium))
-    app.add_handler(CallbackQueryHandler(premium_callback))
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
-    app.add_handler(MessageHandler(filters.PHOTO, handle_photo))
-
-    logging.info("🤖 Bot ishga tushdi!")
-    app.run_polling()
-
-if __name__ == "__main__":
-    main()
+# Rasm handler - chek ras
