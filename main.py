@@ -65,9 +65,37 @@ def reset_daily_if_needed():
 # /start
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
-        "Salom! Men GPT-4 mini asosidagi Telegram botman 🤖\n"
-        "Siz /premium yoki /status komandalarini yozib ishlatishingiz mumkin."
+        "Salom! Men GPT-4 asosidagi Telegram botman 🤖"
     )
+
+# 🔹 Ban funksiyalari
+async def ban_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.effective_user.id != ADMIN_ID:
+        await update.message.reply_text("⚠️ Siz admin emassiz.")
+        return
+    if len(context.args) < 2:
+        await update.message.reply_text("❌ Foydalanish: /ban <user_id> <sababi>")
+        return
+    user_id = int(context.args[0])
+    reason = " ".join(context.args[1:])
+    banned_users[user_id] = reason
+    await update.message.reply_text(
+        f"✅ {user_id} foydalanuvchi ban qilindi.\n📌 Sababi: {reason}"
+    )
+
+async def unban_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.effective_user.id != ADMIN_ID:
+        await update.message.reply_text("⚠️ Siz admin emassiz.")
+        return
+    if len(context.args) != 1:
+        await update.message.reply_text("❌ Foydalanish: /unban <user_id>")
+        return
+    user_id = int(context.args[0])
+    if user_id in banned_users:
+        del banned_users[user_id]
+        await update.message.reply_text(f"✅ {user_id} foydalanuvchi unban qilindi.")
+    else:
+        await update.message.reply_text("⚠️ Bu foydalanuvchi ban qilingan emas.")
 
 # /premium
 async def premium(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -154,7 +182,7 @@ async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     reset_daily_if_needed()
     user = update.effective_user
-    if update.message.text:
+    if user.message and user.message.text:
         text = update.message.text
         now = datetime.now()
         user_last_messages[user.id] = [t for t in user_last_messages[user.id] if now - t < timedelta(minutes=1)]
@@ -217,6 +245,8 @@ def main():
     app.add_handler(CommandHandler("premium", premium))
     app.add_handler(CommandHandler("status", status))
     app.add_handler(CommandHandler("givepremium", give_premium))
+    app.add_handler(CommandHandler("ban", ban_user))      # 🔹 Ban
+    app.add_handler(CommandHandler("unban", unban_user))  # 🔹 Unban
     app.add_handler(CallbackQueryHandler(premium_callback))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     app.add_handler(MessageHandler(filters.PHOTO, handle_photo))
